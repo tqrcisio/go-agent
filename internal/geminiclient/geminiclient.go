@@ -55,10 +55,10 @@ func New(ctx context.Context) (*GeminiClient, error) {
 }
 
 // IdentifyProject analyzes the file list to determine the technology stack.
-func (c *GeminiClient) IdentifyProject(ctx context.Context, fileStructure string) (*ProjectInfo, error) {
+func (c *GeminiClient) IdentifyProject(ctx context.Context, fileStructure string, gitHistory string) (*ProjectInfo, error) {
 	prompt := fmt.Sprintf(`
 You are a generic Software Architect.
-Analyze the following file structure of a software project and identify:
+Analyze the following file structure and recent git history of a software project and identify:
 1. The primary programming language.
 2. The file extensions that contain the source code (e.g., .go, .js, .py, .ts).
 3. A specific "persona" or goal for a code reviewer analyzing this project (e.g., "You are a senior React engineer looking for state management issues", "You are a Python expert looking for typing issues").
@@ -69,7 +69,12 @@ File Structure:
 ---
 %s
 ---
-`, fileStructure)
+
+Recent Git History:
+---
+%s
+---
+`, fileStructure, gitHistory)
 
 	resp, err := c.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

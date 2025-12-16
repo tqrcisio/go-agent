@@ -13,6 +13,8 @@ type State struct {
 
 	ProjectInfo *geminiclient.ProjectInfo
 
+	GitHistory string
+
 	SourceFiles []string
 	Chunks      []chunker.CodeChunk
 

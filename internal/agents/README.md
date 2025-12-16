@@ -6,6 +6,7 @@ This directory contains the individual agents that form the multi-agent architec
 
 - **RepoCloneAgent**: Handles the cloning or updating of the target GitHub repository into a local cache.
 - **FileStructureAgent**: Scans the cloned repository and constructs a string representation of its file and directory structure.
+- **GitAnalysisAgent**: Fetches recent commit history and statistics (last 10 commits) from the repository. This provides context on active development areas and recent changes.
 - **IdentifyProjectAgent**: Utilizes Google's Gemini AI (Agent 1 - The Architect) to analyze the file structure, identify the primary programming language, relevant file extensions, and formulate a specific analysis goal/persona for subsequent agents.
 - **ScanFilesAgent**: Based on the `ProjectInfo` from the `IdentifyProjectAgent`, this agent dynamically scans the repository to locate and collect all relevant source code files.
 - **ChunkingAgent**: Takes the identified source files and splits their content into smaller, manageable `CodeChunk`s. This ensures that large files can be processed effectively by the AI model without exceeding context window limits.

@@ -74,6 +74,7 @@ var analyzeCmd = &cobra.Command{
 		orch := orchestrator.New(
 			agents.NewRepoCloneAgent(),
 			agents.NewFileStructureAgent(),
+			agents.NewGitAnalysisAgent(),
 			agents.NewIdentifyProjectAgent(client),
 			agents.NewScanFilesAgent(),
 			agents.NewChunkingAgent(),
