@@ -7,6 +7,7 @@ import (
 	"go-agent/internal/chunker"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -80,15 +81,21 @@ Here is the code:
 
 	var geminiResp GeminiResponse
 	if textPart, ok := part.(genai.Text); ok {
-		// The response is expected to be a text part containing JSON
-		err = json.Unmarshal([]byte(textPart), &geminiResp)
+		// Extract JSON from markdown if present
+		jsonString := string(textPart)
+		if strings.HasPrefix(jsonString, "```json") && strings.HasSuffix(jsonString, "```") {
+			jsonString = strings.TrimPrefix(jsonString, "```json\n")
+			jsonString = strings.TrimSuffix(jsonString, "\n```")
+		}
+
+		err = json.Unmarshal([]byte(jsonString), &geminiResp)
 		if err != nil {
-			log.Printf("Error unmarshalling JSON response: %v. Response string: %s", err, textPart)
-			return nil, fmt.Errorf("error unmarshalling json response: %w", err)
+			log.Printf("Error unmarshalling JSON response: %v. Response string: %s", err, jsonString)
+			return &GeminiResponse{Issues: []Finding{}}, fmt.Errorf("error unmarshalling json response: %w", err)
 		}
 	} else {
 		log.Println("Unexpected response format from Gemini API")
-		return nil, fmt.Errorf("unexpected response format from gemini api")
+		return &GeminiResponse{Issues: []Finding{}}, fmt.Errorf("unexpected response format from gemini api")
 	}
 
 	return &geminiResp, nil

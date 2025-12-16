@@ -18,7 +18,8 @@ func GenerateMarkdown(findings []geminiclient.Finding, repoURL string) (string, 
 	// Group findings by severity
 	findingsBySeverity := make(map[string][]geminiclient.Finding)
 	for _, f := range findings {
-		findingsBySeverity[f.Severity] = append(findingsBySeverity[f.Severity], f)
+		severityUpper := strings.ToUpper(f.Severity) // Convert to uppercase
+		findingsBySeverity[severityUpper] = append(findingsBySeverity[severityUpper], f)
 	}
 
 	var md strings.Builder
