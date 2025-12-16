@@ -89,15 +89,10 @@ Recent Git History:
 	var info ProjectInfo
 
 	if textPart, ok := part.(genai.Text); ok {
-		jsonString := string(textPart)
-		if strings.HasPrefix(jsonString, "```json") && strings.HasSuffix(jsonString, "```") {
-			jsonString = strings.TrimPrefix(jsonString, "```json\n")
-			jsonString = strings.TrimSuffix(jsonString, "\n```")
+		jsonString, err := extractJSON(string(textPart))
+		if err != nil {
+			return nil, err
 		}
-		// Handle cases where markdown block might be slightly different or missing newline
-		jsonString = strings.TrimPrefix(jsonString, "```json")
-		jsonString = strings.TrimSuffix(jsonString, "```")
-
 
 		err = json.Unmarshal([]byte(jsonString), &info)
 		if err != nil {
@@ -144,26 +139,32 @@ Here is the code:
 
 	var geminiResp GeminiResponse
 	if textPart, ok := part.(genai.Text); ok {
-		// Extract JSON from markdown if present
-		jsonString := string(textPart)
-		if strings.HasPrefix(jsonString, "```json") {
-			// Find the last occurrence of ```
-			lastIndex := strings.LastIndex(jsonString, "```")
-			if lastIndex != -1 && lastIndex > 7 {
-				jsonString = jsonString[7:lastIndex]
-			}
-		}
-		jsonString = strings.TrimSpace(jsonString)
-
-		err = json.Unmarshal([]byte(jsonString), &geminiResp)
+		jsonString, err := extractJSON(string(textPart))
 		if err != nil {
-			log.Printf("Error unmarshalling JSON response: %v. Response string: %s", err, jsonString)
-			return &GeminiResponse{Issues: []Finding{}}, fmt.Errorf("error unmarshalling json response: %w", err)
+			// It's possible for the model to return no issues, which is not an error.
+			// We'll log it for debugging but return an empty response.
+			log.Printf("Could not extract JSON from chunk analysis, maybe no issues found: %v. Raw response: %s", err, string(textPart))
+			return &GeminiResponse{}, nil
 		}
-	} else {
-		log.Println("Unexpected response format from Gemini API")
-		return &GeminiResponse{Issues: []Finding{}}, fmt.Errorf("unexpected response format from gemini api")
+
+		err = json.Unmarshal([]byte(jsonString), &analysisResponse)
+		if err != nil {
+			log.Printf("Error unmarshalling analysis response: %v. Cleaned response: %s", err, jsonString)
+			return nil, err
+		}
 	}
 
-	return &geminiResp, nil
+	return &analysisResponse, nil
+}
+
+// extractJSON robustly extracts a JSON object from a string that might contain markdown.
+func extractJSON(s string) (string, error) {
+	start := strings.Index(s, "{")
+	end := strings.LastIndex(s, "}")
+
+	if start == -1 || end == -1 || end <= start {
+		return "", fmt.Errorf("no valid JSON object found in the string")
+	}
+
+	return s[start : end+1], nil
 }

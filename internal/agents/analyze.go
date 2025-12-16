@@ -36,21 +36,25 @@ func (a *AnalyzeChunksAgent) Run(ctx context.Context, s *state.State) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for chunk := range chunkChan {
-				// Check for cancellation
+			for {
 				select {
 				case <-ctx.Done():
 					return
-				default:
-				}
-
-				resp, err := a.client.AnalyzeChunk(ctx, chunk, *s.ProjectInfo)
-				if err != nil {
-					// In a real agent, we might want to collect these errors
-					continue
-				}
-				if resp != nil && len(resp.Issues) > 0 {
-					findingChan <- resp.Issues
+				case chunk, ok := <-chunkChan:
+					if !ok {
+						return
+					}
+					// processa chunk
+					resp, err := a.client.AnalyzeChunk(ctx, chunk, *s.ProjectInfo)
+					if err != nil {
+						s.Errors = append(s.Errors,
+							fmt.Errorf("analyze failed for %s:%d-%d: %w",
+								chunk.FilePath, chunk.StartLine, chunk.EndLine, err))
+						continue
+					}
+					if resp != nil && len(resp.Issues) > 0 {
+						findingChan <- resp.Issues
+					}
 				}
 			}
 		}()
@@ -68,9 +72,13 @@ func (a *AnalyzeChunksAgent) Run(ctx context.Context, s *state.State) error {
 		close(findingChan)
 	}()
 
-	for findings := range findingChan {
-		s.Findings = append(s.Findings, findings...)
-	}
+	collectFindings(s, findingChan)
 
 	return nil
+}
+
+func collectFindings(s *state.State, ch <-chan []geminiclient.Finding) {
+	for findings := range ch {
+		s.Findings = append(s.Findings, findings...)
+	}
 }

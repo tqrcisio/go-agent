@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // Clone clones a repository from the given URL into a local cache directory.
@@ -21,7 +22,7 @@ func Clone(repoURL string) (string, error) {
 	}
 
 	// Basic way to get a repo name from URL. This can be improved.
-	repoName := filepath.Base(repoURL)
+	repoName := strings.TrimSuffix(filepath.Base(repoURL), ".git")
 	repoPath := filepath.Join(cacheDir, repoName)
 
 	// If the repo already exists, pull the latest changes.

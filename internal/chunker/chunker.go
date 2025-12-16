@@ -28,6 +28,8 @@ func ChunkFile(filePath string) ([]CodeChunk, error) {
 	var lines []string
 	
 	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024) // 1MB per line
 	startLine := 1
 	lineCount := 0
 
