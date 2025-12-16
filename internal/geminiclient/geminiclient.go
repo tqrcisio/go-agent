@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-agent/internal/chunker"
-	"os"
-	"time"
 	"log"
+	"os"
 
-	"cloud.google.com/go/vertexai/apiv1"
-	"cloud.google.com/go/vertexai/apiv1/vertexaipb"
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
 // Finding represents a single issue found by the Gemini analysis.
@@ -26,49 +25,29 @@ type GeminiResponse struct {
 	Issues []Finding `json:"issues"`
 }
 
-// AnalyzeChunk sends a CodeChunk to the Gemini API for analysis.
-// For now, it returns a mocked response.
-func AnalyzeChunk(chunk chunker.CodeChunk) (*GeminiResponse, error) {
+// GeminiClient is a client for the Gemini API.
+type GeminiClient struct {
+	model *genai.GenerativeModel
+}
+
+// New creates a new GeminiClient.
+func New(ctx context.Context) (*GeminiClient, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY environment variable not set")
 	}
 
-	// Mocked response for development
-	// In the next step, we will replace this with a real API call.
-	if os.Getenv("MOCK_API") == "true" {
-		fmt.Printf("Analyzing chunk %s:%d-%d (mocked)...\n", chunk.FilePath, chunk.StartLine, chunk.EndLine)
-		time.Sleep(100 * time.Millisecond) // Simulate network latency
-		mockResponse := &GeminiResponse{
-			Issues: []Finding{
-				{
-					Severity:    "HIGH",
-					Description: "Potential nil pointer dereference detected.",
-					File:        chunk.FilePath,
-					Line:        chunk.StartLine + 5, // Example line
-				},
-			},
-		}
-		return mockResponse, nil
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("error creating genai client: %w", err)
 	}
 
-	return callGeminiAPI(chunk)
+	model := client.GenerativeModel("gemini-1.5-flash-latest")
+	return &GeminiClient{model: model}, nil
 }
 
-
-func callGeminiAPI(chunk chunker.CodeChunk) (*GeminiResponse, error) {
-	ctx := context.Background()
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	location := "us-central1" // Or your desired location
-	modelName := "gemini-1.5-pro-preview-0409"   // Or your desired model
-
-	client, err := vertexai.NewPredictionClient(ctx)
-	if err != nil {
-		log.Printf("Error creating Vertex AI client: %v", err)
-		return nil, fmt.Errorf("error creating vertex ai client: %w", err)
-	}
-	defer client.Close()
-
+// AnalyzeChunk sends a CodeChunk to the Gemini API for analysis.
+func (c *GeminiClient) AnalyzeChunk(ctx context.Context, chunk chunker.CodeChunk) (*GeminiResponse, error) {
 	prompt := fmt.Sprintf(`
 You are a senior Go engineer.
 Analyze the following Go code from file '%s' and identify:
@@ -84,23 +63,18 @@ Here is the code:
 ---
 `, chunk.FilePath, chunk.Content)
 
-	req := &vertexaipb.GenerateContentRequest{
-		Model: fmt.Sprintf("projects/%s/locations/%s/publishers/google/models/%s", projectID, location, modelName),
-		Contents: []*vertexaipb.Content{
+	req := &genai.GenerateContentRequest{
+		Contents: []*genai.Content{
 			{
 				Role: "user",
-				Parts: []*vertexaipb.Part{
-					{
-						Data: &vertexaipb.Part_Text{
-							Text: prompt,
-						},
-					},
+				Parts: []genai.Part{
+					genai.Text(prompt),
 				},
 			},
 		},
 	}
 
-	resp, err := client.GenerateContent(ctx, req)
+	resp, err := c.model.GenerateContent(ctx, req.Contents...)
 	if err != nil {
 		log.Printf("Error generating content: %v", err)
 		return nil, fmt.Errorf("error generating content: %w", err)
@@ -110,18 +84,15 @@ Here is the code:
 		log.Println("No content received from Gemini API")
 		return &GeminiResponse{Issues: []Finding{}}, nil // Return empty response
 	}
-	
+
 	part := resp.Candidates[0].Content.Parts[0]
-	
+
 	var geminiResp GeminiResponse
-	// The response is expected to be a text part containing JSON
-	if textPart, ok := part.GetData().(*vertexaipb.Part_Text); ok {
-		// Clean the response to extract pure JSON
-		jsonStr := strings.Trim(textPart.Text, "```json\n")
-		
-		err = json.Unmarshal([]byte(jsonStr), &geminiResp)
+	if textPart, ok := part.(genai.Text); ok {
+		// The response is expected to be a text part containing JSON
+		err = json.Unmarshal([]byte(textPart), &geminiResp)
 		if err != nil {
-			log.Printf("Error unmarshalling JSON response: %v. Response string: %s", err, jsonStr)
+			log.Printf("Error unmarshalling JSON response: %v. Response string: %s", err, textPart)
 			return nil, fmt.Errorf("error unmarshalling json response: %w", err)
 		}
 	} else {

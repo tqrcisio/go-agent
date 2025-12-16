@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go-agent/internal/chunker"
 	"go-agent/internal/geminiclient"
 	"go-agent/internal/repomanager"
+	"go-agent/internal/report"
 	"go-agent/internal/scanner"
+	"log"
 	"os"
+	"sync"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
@@ -28,9 +33,10 @@ var analyzeCmd = &cobra.Command{
 	Long:  `Analyzes a GitHub repository for potential bugs and vulnerabilities.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Set this to true to use mocked API responses
-		os.Setenv("MOCK_API", "true")
-		os.Setenv("GEMINI_API_KEY", "your-api-key-here") // Set a dummy key
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatalf("Error loading .env file")
+		}
 
 		repoURL := args[0]
 		fmt.Println("Analyzing repository:", repoURL)
@@ -40,6 +46,7 @@ var analyzeCmd = &cobra.Command{
 			fmt.Printf("Error cloning repository: %v\n", err)
 			os.Exit(1)
 		}
+		defer os.RemoveAll(repoPath)
 		fmt.Printf("Repository cloned to: %s\n", repoPath)
 
 		goFiles, err := scanner.Scan(repoPath)
@@ -60,28 +67,63 @@ var analyzeCmd = &cobra.Command{
 		}
 		fmt.Printf("Total chunks created: %d. Starting analysis...\n", len(allChunks))
 
+		ctx := context.Background()
+		client, err := geminiclient.New(ctx)
+		if err != nil {
+			log.Fatalf("Error creating Gemini client: %v", err)
+		}
+
 		var allFindings []geminiclient.Finding
+		var wg sync.WaitGroup
+		chunkChan := make(chan chunker.CodeChunk, len(allChunks))
+		findingChan := make(chan []geminiclient.Finding, len(allChunks))
+
+		// Start workers
+		numWorkers := 10 // Adjust as needed
+		for i := 0; i < numWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for chunk := range chunkChan {
+					resp, err := client.AnalyzeChunk(ctx, chunk)
+					if err != nil {
+						fmt.Printf("Error analyzing chunk %s:%d-%d: %v\n", chunk.FilePath, chunk.StartLine, chunk.EndLine, err)
+						continue
+					}
+					if resp != nil && len(resp.Issues) > 0 {
+						findingChan <- resp.Issues
+					}
+				}
+			}()
+		}
+
+		// Send chunks to workers
 		for _, chunk := range allChunks {
-			resp, err := geminiclient.AnalyzeChunk(chunk)
-			if err != nil {
-				fmt.Printf("Error analyzing chunk %s:%d-%d: %v\n", chunk.FilePath, chunk.StartLine, chunk.EndLine, err)
-				continue
-			}
-			if resp != nil && len(resp.Issues) > 0 {
-				allFindings = append(allFindings, resp.Issues...)
-			}
+			chunkChan <- chunk
+		}
+		close(chunkChan)
+
+		// Wait for workers to finish and collect findings
+		go func() {
+			wg.Wait()
+			close(findingChan)
+		}()
+
+		for findings := range findingChan {
+			allFindings = append(allFindings, findings...)
 		}
 
 		fmt.Println("\n--- Analysis Complete ---")
-		if len(allFindings) == 0 {
-			fmt.Println("No issues found.")
-			return
+		reportMsg, err := report.GenerateMarkdown(allFindings, repoURL)
+		if err != nil {
+			fmt.Printf("Error generating report: %v\n", err)
+			os.Exit(1)
 		}
+		fmt.Println(reportMsg)
+	},
+}
 
-		fmt.Printf("Found %d potential issues:\n", len(allFindings))
-		for _, finding := range allFindings {
-			fmt.Printf("- [%s] %s:%d: %s\n", finding.Severity, finding.File, finding.Line, finding.Description)
-		}
+		fmt.Println(reportMsg)
 	},
 }
 
