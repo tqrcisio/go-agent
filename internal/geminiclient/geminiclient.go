@@ -147,14 +147,14 @@ Here is the code:
 			return &GeminiResponse{}, nil
 		}
 
-		err = json.Unmarshal([]byte(jsonString), &analysisResponse)
+		err = json.Unmarshal([]byte(jsonString), &geminiResp)
 		if err != nil {
 			log.Printf("Error unmarshalling analysis response: %v. Cleaned response: %s", err, jsonString)
 			return nil, err
 		}
 	}
 
-	return &analysisResponse, nil
+	return &geminiResp, nil
 }
 
 // extractJSON robustly extracts a JSON object from a string that might contain markdown.

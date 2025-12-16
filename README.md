@@ -52,11 +52,22 @@ BugScan is a powerful, multi-language command-line tool written in Go that lever
 │   │   └── report.go
 │   └── scanner/
 │       └── scanner.go
-├── .env                      # Environment variables configuration
 ├── go.mod                    # Go module definition
 ├── go.sum                    # Go module checksums
 └── README.md                 # Project documentation
 ```
+
+## Recent Improvements
+
+Based on a recent architectural review, several key improvements have been implemented to enhance the robustness and reliability of the agent pipeline:
+
+- **Robust Error Handling**: The `AnalyzeChunksAgent` now captures and logs all errors, ensuring that analysis failures are visible and the final report's reliability can be assessed.
+- **Responsive Cancellation**: Worker goroutines now respond immediately to context cancellation, preventing them from getting stuck in a blocked state.
+- **Resilient JSON Parsing**: The logic for parsing JSON from the Gemini API has been hardened to handle variations in markdown formatting.
+- **Large File Support**: The file chunker now uses a larger buffer to handle files with very long lines without silent failures.
+- **Correct Repo Naming**: The repository cloning logic now correctly trims the `.git` suffix from folder names.
+- **Input Validation**: The project identification step now validates the response from the LLM to ensure essential data is present.
+- **Code Cleanup**: Removed unused code to improve maintainability.
 
 ## Prerequisites
 
@@ -82,12 +93,25 @@ BugScan is a powerful, multi-language command-line tool written in Go that lever
     GEMINI_API_KEY=your_actual_api_key_here
     ```
 
+4.  **Build the project** (optional):
+    If you prefer to have a compiled binary, you can build the project:
+    ```bash
+    go build -o go-agent ./cmd/go-agent
+    ```
+    This will create an executable named `go-agent` in the project root.
+
 ## Usage
 
-To analyze a GitHub repository, run the `analyze` command with the repository URL:
+You can run the application using `go run` or by using the compiled binary if you built it.
 
+**Using `go run`:**
 ```bash
 go run ./cmd/go-agent analyze https://github.com/username/repo-name
+```
+
+**Using the compiled binary:**
+```bash
+./go-agent analyze https://github.com/username/repo-name
 ```
 
 ### Examples
