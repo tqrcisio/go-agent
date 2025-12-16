@@ -2,14 +2,12 @@ package tree
 
 import "fmt"
 
-// Node represents a node in the binary tree
 type Node struct {
 	Value string
 	Left  *Node
 	Right *Node
 }
 
-// Insert adds a new value to the binary tree
 func Insert(root *Node, value string) *Node {
 	if root == nil {
 		return &Node{Value: value}
@@ -22,7 +20,6 @@ func Insert(root *Node, value string) *Node {
 	return root
 }
 
-// InOrder traverses the tree and prints the values
 func InOrder(root *Node) {
 	if root == nil {
 		return
