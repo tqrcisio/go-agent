@@ -123,10 +123,6 @@ var analyzeCmd = &cobra.Command{
 	},
 }
 
-		fmt.Println(reportMsg)
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(analyzeCmd)
 }

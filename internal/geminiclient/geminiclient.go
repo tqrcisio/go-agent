@@ -42,7 +42,7 @@ func New(ctx context.Context) (*GeminiClient, error) {
 		return nil, fmt.Errorf("error creating genai client: %w", err)
 	}
 
-	model := client.GenerativeModel("gemini-1.5-flash-latest")
+	model := client.GenerativeModel("gemini-2.5-pro")
 	return &GeminiClient{model: model}, nil
 }
 
@@ -63,18 +63,9 @@ Here is the code:
 ---
 `, chunk.FilePath, chunk.Content)
 
-	req := &genai.GenerateContentRequest{
-		Contents: []*genai.Content{
-			{
-				Role: "user",
-				Parts: []genai.Part{
-					genai.Text(prompt),
-				},
-			},
-		},
-	}
-
-	resp, err := c.model.GenerateContent(ctx, req.Contents...)
+	resp, err := c.model.GenerateContent(ctx,
+		genai.Text(prompt),
+	)
 	if err != nil {
 		log.Printf("Error generating content: %v", err)
 		return nil, fmt.Errorf("error generating content: %w", err)

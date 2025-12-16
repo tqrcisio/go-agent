@@ -25,7 +25,6 @@ func ChunkFile(filePath string) ([]CodeChunk, error) {
 	defer file.Close()
 
 	var chunks []CodeChunk
-	var currentChunk strings.Builder
 	var lines []string
 	
 	scanner := bufio.NewScanner(file)
