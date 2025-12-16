@@ -1,18 +1,24 @@
 # BugScan (Multi-Agent Code Analyzer)
 
-BugScan is a powerful, multi-language command-line tool written in Go that leverages Google's Gemini AI to analyze GitHub repositories for potential bugs, vulnerabilities, and code quality issues. It employs a **Multi-Agent Architecture** to first understand the project's context and then perform a deep, tailored analysis.
+BugScan is a powerful, multi-language command-line tool written in Go that leverages Google's Gemini AI to analyze GitHub repositories for potential bugs, vulnerabilities, and code quality issues. It employs a **Multi-Agent Architecture** orchestrated by a central pipeline to first understand the project's context and then perform a deep, tailored analysis.
 
 ## Features
 
-- **Multi-Agent Architecture**:
-  - **Agent 1 (The Architect)**: Analyzes the file structure to identify the programming language (e.g., Python, Go, JavaScript) and determines the best analysis strategy.
-  - **Agent 2 (The Reviewer)**: Performs deep code analysis based on the context provided by the Architect.
+- **Multi-Agent Architecture**: A modular pipeline of specialized agents:
+  - **RepoCloneAgent**: Clones or updates the target repository.
+  - **FileStructureAgent**: Maps the project's file structure.
+  - **IdentifyProjectAgent**: Uses AI to identify the language and define an analysis strategy.
+  - **ScanFilesAgent**: Locates relevant source code files based on the identified strategy.
+  - **ChunkingAgent**: Splits files into manageable chunks for AI processing.
+  - **AnalyzeChunksAgent**: Performs deep, concurrent code analysis using Gemini AI.
+  - **DeduplicateFindingsAgent**: Removes duplicate issues from the findings.
+  - **PrioritizeFindingsAgent**: Sorts findings by severity (High > Medium > Low).
+  - **ReportAgent**: Generates the final Markdown report.
 - **Multi-Language Support**: Automatically detects and analyzes projects in various languages (Go, Python, JavaScript, TypeScript, etc.).
 - **Automated Repository Cloning**: Seamless cloning of GitHub repositories to a temporary cache.
-- **Smart Code Scanning**: Dynamically targets relevant file extensions while ignoring noise (e.g., `.git`, `node_modules`, `vendor`).
-- **Intelligent Chunking**: Splits large files into manageable chunks to ensure optimal processing by the AI model.
-- **Concurrent Processing**: Employs a worker pool pattern to analyze code chunks in parallel for high performance.
-- **Comprehensive Reporting**: Generates a detailed Markdown report (`report.md`) categorized by severity (High, Medium, Low).
+- **Smart Code Scanning**: Dynamically targets relevant file extensions while ignoring noise.
+- **Concurrent Processing**: Employs a worker pool pattern to analyze code chunks in parallel.
+- **Comprehensive Reporting**: Generates a detailed Markdown report (`report.md`).
 
 ## Project Structure
 
@@ -20,20 +26,32 @@ BugScan is a powerful, multi-language command-line tool written in Go that lever
 .
 ├── cmd/
 │   └── go-agent/
-│       └── main.go           # Application entry point & Agent Orchestrator
+│       └── main.go           # Application entry point
 ├── internal/
+│   ├── agents/               # Individual agent implementations
+│   │   ├── analyze.go
+│   │   ├── chunk.go
+│   │   ├── clone.go
+│   │   ├── deduplicate.go
+│   │   ├── identify.go
+│   │   ├── prioritize.go
+│   │   ├── report.go
+│   │   ├── scan.go
+│   │   └── structure.go
+│   ├── orchestrator/
+│   │   └── orchestrator.go   # Manages agent execution flow
+│   ├── state/
+│   │   └── state.go          # Shared state passed between agents
 │   ├── chunker/
-│   │   └── chunker.go        # Logic for splitting files into code chunks
+│   │   └── chunker.go
 │   ├── geminiclient/
-│   │   └── geminiclient.go   # Agent implementations (Architect & Reviewer)
+│   │   └── geminiclient.go
 │   ├── repomanager/
-│   │   └── repomanager.go    # Handles git cloning and updates
+│   │   └── repomanager.go
 │   ├── report/
-│   │   └── report.go         # Generates Markdown reports from findings
-│   ├── scanner/
-│   │   └── scanner.go        # Dynamic file scanner
-│   └── tree/
-│       └── tree.go           # (Legacy) Binary search tree implementation
+│   │   └── report.go
+│   └── scanner/
+│       └── scanner.go
 ├── .env                      # Environment variables configuration
 ├── go.mod                    # Go module definition
 ├── go.sum                    # Go module checksums
@@ -74,28 +92,31 @@ go run ./cmd/go-agent analyze https://github.com/username/repo-name
 
 ### Examples
 
-**Analyze a Go project:**
-```bash
-go run ./cmd/go-agent analyze https://github.com/gin-gonic/gin
-```
-
 **Analyze a Python project:**
 ```bash
 go run ./cmd/go-agent analyze https://github.com/tqrcisio/document-parser-api
 ```
 
-### Output
+### Output Example
 
-The tool will:
-1.  **Clone** the specified repository.
-2.  **Agent 1** scans the file structure to identify the language (e.g., "Python") and define the analysis goal (e.g., "Check for security vulnerabilities in file processing").
-3.  **Scan** for relevant files (e.g., `.py`) based on Agent 1's output.
-4.  **Chunk** the code for processing.
-5.  **Agent 2** analyzes chunks in parallel using the tailored prompt from Agent 1.
-6.  **Generate** a `report.md` file in the current directory containing the findings.
+The tool provides real-time feedback on the progress of each agent:
+
+```text
+2025/12/16 13:01:00 [RepoCloneAgent] Starting...
+Cloning repository document-parser-api...
+2025/12/16 13:01:01 [RepoCloneAgent] Finished in 946.27ms
+2025/12/16 13:01:01 [IdentifyProjectAgent] Starting...
+2025/12/16 13:01:09 [IdentifyProjectAgent] Finished in 8.54s
+...
+2025/12/16 13:01:09 [AnalyzeChunksAgent] Starting...
+2025/12/16 13:01:48 [AnalyzeChunksAgent] Finished in 39.44s
+...
+Report successfully generated: report.md
+```
 
 ## Technical Details
 
-- **Concurrency**: The tool uses a worker pool (default 10 workers) to send requests to Gemini concurrently.
-- **Context Awareness**: Agent 1 builds a "Project Context" object containing the language, target file extensions, and a specific "persona" for the reviewer (Agent 2) to adopt.
-- **Cache**: Repositories are cloned to `~/.bugscan/repos` to avoid re-downloading if they have already been analyzed (doing a `git pull` instead).
+- **Orchestration**: A central `Orchestrator` runs a sequence of `Agents`. Each agent performs a specific task and updates a shared `State` object.
+- **Concurrency**: The `AnalyzeChunksAgent` uses a worker pool (default 10 workers) to send requests to Gemini concurrently.
+- **Context Awareness**: The `IdentifyProjectAgent` builds a "Project Context" object containing the language, target file extensions, and a specific "persona" for the reviewer to adopt.
+- **Cache**: Repositories are cloned to `~/.bugscan/repos` to avoid re-downloading.
