@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,7 +10,7 @@ import (
 
 // ToolListFiles lists files in a directory.
 // Arguments: "path" (string) - relative path from project root.
-func ToolListFiles(args map[string]interface{}) (map[string]interface{}, error) {
+func ToolListFiles(ctx context.Context, args map[string]interface{}) (map[string]interface{}, error) {
 	path, ok := args["path"].(string)
 	if !ok || path == "" {
 		path = "."
@@ -45,7 +46,7 @@ func ToolListFiles(args map[string]interface{}) (map[string]interface{}, error) 
 
 // ToolReadFile reads the content of a file.
 // Arguments: "path" (string).
-func ToolReadFile(args map[string]interface{}) (map[string]interface{}, error) {
+func ToolReadFile(ctx context.Context, args map[string]interface{}) (map[string]interface{}, error) {
 	path, ok := args["path"].(string)
 	if !ok || path == "" {
 		return map[string]interface{}{"error": "Missing 'path' argument"}, nil
@@ -77,7 +78,7 @@ func ToolReadFile(args map[string]interface{}) (map[string]interface{}, error) {
 
 // ToolSearchFiles searches for a text pattern using grep.
 // Arguments: "pattern" (string), "path" (string - optional, default ".").
-func ToolSearchFiles(args map[string]interface{}) (map[string]interface{}, error) {
+func ToolSearchFiles(ctx context.Context, args map[string]interface{}) (map[string]interface{}, error) {
 	pattern, ok := args["pattern"].(string)
 	if !ok || pattern == "" {
 		return map[string]interface{}{"error": "Missing 'pattern' argument"}, nil
@@ -94,8 +95,13 @@ func ToolSearchFiles(args map[string]interface{}) (map[string]interface{}, error
 
 	// Using grep -rn (recursive, line number)
 	// Limiting to 50 matches to avoid token explosion
-	cmd := exec.Command("grep", "-rn", "--max-count=50", "--exclude-dir=.git", pattern, path)
+	cmd := exec.CommandContext(ctx, "grep", "-rn", "--max-count=50", "--exclude-dir=.git", pattern, path)
 	output, err := cmd.CombinedOutput()
+
+	// Check if the error was due to context cancellation
+	if ctx.Err() == context.Canceled {
+		return map[string]interface{}{"error": "Operation cancelled by user"}, nil
+	}
 
 	// grep returns exit code 1 if no matches found, which is not an "error" for us
 	if err != nil && cmd.ProcessState.ExitCode() != 1 {

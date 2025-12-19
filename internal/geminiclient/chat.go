@@ -116,11 +116,11 @@ func (s *ChatSession) SendMessage(ctx context.Context, msg string) (string, erro
 
 				switch funcCall.Name {
 				case "list_files":
-					result, toolErr = tools.ToolListFiles(funcCall.Args)
+					result, toolErr = tools.ToolListFiles(ctx, funcCall.Args)
 				case "read_file":
-					result, toolErr = tools.ToolReadFile(funcCall.Args)
+					result, toolErr = tools.ToolReadFile(ctx, funcCall.Args)
 				case "search_files":
-					result, toolErr = tools.ToolSearchFiles(funcCall.Args)
+					result, toolErr = tools.ToolSearchFiles(ctx, funcCall.Args)
 				default:
 					result = map[string]interface{}{"error": "Unknown function"}
 				}
