@@ -1,8 +1,8 @@
 package chunker
 
 import (
-	"bufio"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -16,55 +16,46 @@ type CodeChunk struct {
 	Content   string
 }
 
+var vueStyleRegex = regexp.MustCompile(`(?s)<style[^>]*>.*?</style>`)
+
+func cleanContent(content string, filePath string) string {
+	if strings.HasSuffix(filePath, ".vue") {
+		return vueStyleRegex.ReplaceAllString(content, "<style scoped>\n/* Style removed for analysis efficiency */\n</style>")
+	}
+	return content
+}
+
 // ChunkFile reads a file and splits its content into multiple CodeChunks.
 func ChunkFile(filePath string) ([]CodeChunk, error) {
-	file, err := os.Open(filePath)
+	contentBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+
+	content := string(contentBytes)
+	content = cleanContent(content, filePath)
 
 	var chunks []CodeChunk
-	var lines []string
+	lines := strings.Split(content, "\n")
 	
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024) // 1MB per line
-	startLine := 1
-	lineCount := 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		lines = append(lines, line)
-		lineCount++
-
-		if lineCount >= maxLinesPerChunk {
-			chunks = append(chunks, CodeChunk{
-				FilePath:  filePath,
-				StartLine: startLine,
-				EndLine:   startLine + len(lines) - 1,
-				Content:   strings.Join(lines, "\n"),
-			})
-			// Reset for the next chunk
-			lines = []string{}
-			startLine += lineCount
-			lineCount = 0
-		}
+	totalLines := len(lines)
+	if totalLines == 0 {
+		return chunks, nil
 	}
 
-	// Add the last remaining chunk if any
-	if len(lines) > 0 {
+	for i := 0; i < totalLines; i += maxLinesPerChunk {
+		end := i + maxLinesPerChunk
+		if end > totalLines {
+			end = totalLines
+		}
+		
+		chunkLines := lines[i:end]
 		chunks = append(chunks, CodeChunk{
 			FilePath:  filePath,
-			StartLine: startLine,
-			EndLine:   startLine + len(lines) - 1,
-			Content:   strings.Join(lines, "\n"),
+			StartLine: i + 1,
+			EndLine:   end,
+			Content:   strings.Join(chunkLines, "\n"),
 		})
-	}
-
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 
 	return chunks, nil

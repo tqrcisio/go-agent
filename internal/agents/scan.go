@@ -22,7 +22,12 @@ func (a *ScanFilesAgent) Run(ctx context.Context, s *state.State) error {
 		return fmt.Errorf("project info is missing")
 	}
 
-	sourceFiles, err := scanner.Scan(s.RepoPath, s.ProjectInfo.FileExtensions)
+	sourceFiles, err := scanner.Scan(
+		s.RepoPath,
+		s.ProjectInfo.FileExtensions,
+		s.ProjectInfo.SourceDirectories,
+		s.ProjectInfo.ExcludePatterns,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to scan files: %w", err)
 	}

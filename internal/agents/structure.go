@@ -49,9 +49,16 @@ func getFileStructure(rootDir string) (string, error) {
 		}
 
 		if info.IsDir() {
-			if strings.HasPrefix(info.Name(), ".") && info.Name() != "." {
-				return filepath.SkipDir // Skip hidden dirs like .git
+			name := info.Name()
+			// Ignore hidden dirs and common dependency/build dirs
+			if strings.HasPrefix(name, ".") && name != "." {
+				return filepath.SkipDir
 			}
+			switch name {
+			case "node_modules", "vendor", "dist", "build", "coverage", "public", "assets":
+				return filepath.SkipDir
+			}
+			
 			structure.WriteString(fmt.Sprintf("%s/\n", relPath))
 		} else {
 			structure.WriteString(fmt.Sprintf("%s\n", relPath))

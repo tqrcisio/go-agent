@@ -15,9 +15,11 @@ import (
 
 // ProjectInfo represents the identified context of the project.
 type ProjectInfo struct {
-	Language       string   `json:"language"`
-	FileExtensions []string `json:"file_extensions"`
-	AnalysisGoal   string   `json:"analysis_goal"`
+	Language          string   `json:"language"`
+	FileExtensions    []string `json:"file_extensions"`
+	AnalysisGoal      string   `json:"analysis_goal"`
+	SourceDirectories []string `json:"source_directories"`
+	ExcludePatterns   []string `json:"exclude_patterns"`
 
 	PromptTokens     int `json:"-"`
 	CandidatesTokens int `json:"-"`
@@ -63,13 +65,22 @@ func New(ctx context.Context, debug bool) (*GeminiClient, error) {
 // IdentifyProject analyzes the file list to determine the technology stack.
 func (c *GeminiClient) IdentifyProject(ctx context.Context, fileStructure string, gitHistory string) (*ProjectInfo, error) {
 	prompt := fmt.Sprintf(`
-You are a generic Software Architect.
-Analyze the following file structure and recent git history of a software project and identify:
-1. The primary programming language.
-2. The file extensions that contain the source code (e.g., .go, .js, .py, .ts).
-3. A specific "persona" or goal for a code reviewer analyzing this project (e.g., "You are a senior React engineer looking for state management issues", "You are a Python expert looking for typing issues").
+You are a Senior Technical Lead.
+Analyze the following file structure and git history to define the analysis scope:
+1. Primary programming language.
+2. Extensions for source code.
+3. A persona for the reviewer.
+4. "source_directories": Identify the 1-3 most important directories containing BUSINESS LOGIC (e.g., "src", "app", "internal", "lib"). Avoid config or asset dirs.
+5. "exclude_patterns": Identify patterns to ignore (e.g., "**/*.spec.ts", "**/test/**", "**/mocks/**", "**/generated/**").
 
-Return the result in raw JSON format with keys: "language", "file_extensions" (array of strings), and "analysis_goal".
+Return raw JSON:
+{
+  "language": "string",
+  "file_extensions": ["string"],
+  "analysis_goal": "string",
+  "source_directories": ["string"],
+  "exclude_patterns": ["string"]
+}
 
 File Structure:
 ---
