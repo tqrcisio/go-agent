@@ -18,6 +18,11 @@ func (a *RepoCloneAgent) Name() string {
 }
 
 func (a *RepoCloneAgent) Run(ctx context.Context, s *state.State) error {
+	if s.IsLocal {
+		// Already pointing to a local directory, nothing to clone.
+		return nil
+	}
+
 	if s.RepoURL == "" {
 		return fmt.Errorf("repository URL is empty")
 	}

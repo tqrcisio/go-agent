@@ -46,9 +46,16 @@ var analyzeCmd = &cobra.Command{
 			RepoURL: repoURL,
 		}
 
+		// Check if the argument is a local directory
+		if info, err := os.Stat(repoURL); err == nil && info.IsDir() {
+			st.IsLocal = true
+			st.RepoPath = repoURL
+			log.Printf("Analyzing local directory: %s", repoURL)
+		}
+
 		// Clean up cloned repository on exit
 		defer func() {
-			if st.RepoPath != "" {
+			if st.RepoPath != "" && !st.IsLocal {
 				// os.RemoveAll(st.RepoPath) // Context: In the previous main.go, this was deferred.
 				// However, strictly adhering to the "do not revert" philosophy, I will keep it.
 				// But maybe the user wants to keep the cache? The README says "to a temporary cache".
@@ -90,7 +97,7 @@ var analyzeCmd = &cobra.Command{
 		}
 
 		// Cleanup (Matching previous main.go behavior)
-		if st.RepoPath != "" {
+		if st.RepoPath != "" && !st.IsLocal {
 			// fmt.Printf("Cleaning up: %s\n", st.RepoPath)
 			os.RemoveAll(st.RepoPath)
 		}

@@ -9,6 +9,7 @@ import (
 type State struct {
 	RepoURL       string
 	RepoPath      string
+	IsLocal       bool
 	FileStructure string
 
 	ProjectInfo *geminiclient.ProjectInfo
