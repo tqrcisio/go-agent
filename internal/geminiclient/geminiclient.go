@@ -58,7 +58,7 @@ func New(ctx context.Context, debug bool) (*GeminiClient, error) {
 		return nil, fmt.Errorf("error creating genai client: %w", err)
 	}
 
-	model := client.GenerativeModel("gemini-2.5-pro")
+	model := client.GenerativeModel("gemini-3-flash-preview")
 	return &GeminiClient{model: model, Debug: debug}, nil
 }
 
