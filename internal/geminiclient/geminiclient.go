@@ -41,10 +41,11 @@ type GeminiResponse struct {
 // GeminiClient is a client for the Gemini API.
 type GeminiClient struct {
 	model *genai.GenerativeModel
+	Debug bool
 }
 
 // New creates a new GeminiClient.
-func New(ctx context.Context) (*GeminiClient, error) {
+func New(ctx context.Context, debug bool) (*GeminiClient, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY environment variable not set")
@@ -56,7 +57,7 @@ func New(ctx context.Context) (*GeminiClient, error) {
 	}
 
 	model := client.GenerativeModel("gemini-2.5-pro")
-	return &GeminiClient{model: model}, nil
+	return &GeminiClient{model: model, Debug: debug}, nil
 }
 
 // IdentifyProject analyzes the file list to determine the technology stack.
@@ -81,6 +82,10 @@ Recent Git History:
 ---
 `, fileStructure, gitHistory)
 
+	if c.Debug {
+		log.Printf("[DEBUG] IdentifyProject Prompt:\n%s\n", prompt)
+	}
+
 	resp, err := c.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		return nil, fmt.Errorf("error identifying project: %w", err)
@@ -94,6 +99,9 @@ Recent Git History:
 	var info ProjectInfo
 
 	if textPart, ok := part.(genai.Text); ok {
+		if c.Debug {
+			log.Printf("[DEBUG] IdentifyProject Response:\n%s\n", string(textPart))
+		}
 		jsonString, err := extractJSON(string(textPart))
 		if err != nil {
 			return nil, err
@@ -132,6 +140,10 @@ Here is the code:
 ---
 `, contextInfo.AnalysisGoal, contextInfo.Language, chunk.FilePath, chunk.Content)
 
+	if c.Debug {
+		log.Printf("[DEBUG] AnalyzeChunk Prompt for %s:\n%s\n", chunk.FilePath, prompt)
+	}
+
 	resp, err := c.model.GenerateContent(ctx,
 		genai.Text(prompt),
 	)
@@ -154,6 +166,9 @@ Here is the code:
 	part := resp.Candidates[0].Content.Parts[0]
 
 	if textPart, ok := part.(genai.Text); ok {
+		if c.Debug {
+			log.Printf("[DEBUG] AnalyzeChunk Response for %s:\n%s\n", chunk.FilePath, string(textPart))
+		}
 		jsonString, err := extractJSON(string(textPart))
 		if err != nil {
 			// It's possible for the model to return no issues, which is not an error.

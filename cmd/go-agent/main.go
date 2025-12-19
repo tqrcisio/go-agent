@@ -35,8 +35,10 @@ var analyzeCmd = &cobra.Command{
 		repoURL := args[0]
 		ctx := context.Background()
 
+		debug, _ := cmd.Flags().GetBool("debug")
+
 		// Initialize Gemini Client
-		client, err := geminiclient.New(ctx)
+		client, err := geminiclient.New(ctx, debug)
 		if err != nil {
 			log.Fatalf("Error creating Gemini client: %v", err)
 		}
@@ -105,6 +107,7 @@ var analyzeCmd = &cobra.Command{
 }
 
 func init() {
+	analyzeCmd.Flags().Bool("debug", false, "Enable debug logs for API requests")
 	rootCmd.AddCommand(analyzeCmd)
 }
 
