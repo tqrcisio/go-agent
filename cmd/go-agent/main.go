@@ -107,7 +107,7 @@ var analyzeCmd = &cobra.Command{
 }
 
 func init() {
-	analyzeCmd.Flags().Bool("debug", false, "Enable debug logs for API requests")
+	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug logs")
 	rootCmd.AddCommand(analyzeCmd)
 }
 
