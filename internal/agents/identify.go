@@ -36,5 +36,8 @@ func (a *IdentifyProjectAgent) Run(ctx context.Context, s *state.State) error {
 	}
 
 	s.ProjectInfo = projectCtx
+	s.TotalPromptTokens += projectCtx.PromptTokens
+	s.TotalCandidatesTokens += projectCtx.CandidatesTokens
+
 	return nil
 }

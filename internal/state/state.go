@@ -21,4 +21,7 @@ type State struct {
 
 	Findings []geminiclient.Finding
 	Errors   []error
+
+	TotalPromptTokens     int
+	TotalCandidatesTokens int
 }

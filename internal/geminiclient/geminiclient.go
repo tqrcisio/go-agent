@@ -18,6 +18,9 @@ type ProjectInfo struct {
 	Language       string   `json:"language"`
 	FileExtensions []string `json:"file_extensions"`
 	AnalysisGoal   string   `json:"analysis_goal"`
+
+	PromptTokens     int `json:"-"`
+	CandidatesTokens int `json:"-"`
 }
 
 // Finding represents a single issue found by the Gemini analysis.
@@ -30,7 +33,9 @@ type Finding struct {
 
 // GeminiResponse is the expected structure of the JSON response from Gemini.
 type GeminiResponse struct {
-	Issues []Finding `json:"issues"`
+	Issues           []Finding `json:"issues"`
+	PromptTokens     int       `json:"-"`
+	CandidatesTokens int       `json:"-"`
 }
 
 // GeminiClient is a client for the Gemini API.
@@ -101,6 +106,11 @@ Recent Git History:
 		}
 	}
 
+	if resp.UsageMetadata != nil {
+		info.PromptTokens = int(resp.UsageMetadata.PromptTokenCount)
+		info.CandidatesTokens = int(resp.UsageMetadata.CandidatesTokenCount)
+	}
+
 	return &info, nil
 }
 
@@ -130,21 +140,26 @@ Here is the code:
 		return nil, fmt.Errorf("error generating content: %w", err)
 	}
 
+	geminiResp := GeminiResponse{}
+	if resp.UsageMetadata != nil {
+		geminiResp.PromptTokens = int(resp.UsageMetadata.PromptTokenCount)
+		geminiResp.CandidatesTokens = int(resp.UsageMetadata.CandidatesTokenCount)
+	}
+
 	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
 		log.Println("No content received from Gemini API")
-		return &GeminiResponse{Issues: []Finding{}}, nil // Return empty response
+		return &geminiResp, nil // Return with token usage but no issues
 	}
 
 	part := resp.Candidates[0].Content.Parts[0]
 
-	var geminiResp GeminiResponse
 	if textPart, ok := part.(genai.Text); ok {
 		jsonString, err := extractJSON(string(textPart))
 		if err != nil {
 			// It's possible for the model to return no issues, which is not an error.
 			// We'll log it for debugging but return an empty response.
 			log.Printf("Could not extract JSON from chunk analysis, maybe no issues found: %v. Raw response: %s", err, string(textPart))
-			return &GeminiResponse{}, nil
+			return &geminiResp, nil
 		}
 
 		err = json.Unmarshal([]byte(jsonString), &geminiResp)

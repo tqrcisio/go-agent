@@ -18,7 +18,7 @@ func (a *ReportAgent) Name() string {
 }
 
 func (a *ReportAgent) Run(ctx context.Context, s *state.State) error {
-	reportMsg, err := report.GenerateMarkdown(s.Findings, s.RepoURL)
+	reportMsg, err := report.GenerateMarkdown(s.Findings, s.RepoURL, s.TotalPromptTokens, s.TotalCandidatesTokens)
 	if err != nil {
 		return fmt.Errorf("failed to generate report: %w", err)
 	}

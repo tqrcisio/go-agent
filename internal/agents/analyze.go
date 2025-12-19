@@ -27,6 +27,7 @@ func (a *AnalyzeChunksAgent) Run(ctx context.Context, s *state.State) error {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex // Protect shared state updates
 	chunkChan := make(chan chunker.CodeChunk, len(s.Chunks))
 	findingChan := make(chan []geminiclient.Finding, len(s.Chunks))
 	
@@ -47,11 +48,19 @@ func (a *AnalyzeChunksAgent) Run(ctx context.Context, s *state.State) error {
 					// processa chunk
 					resp, err := a.client.AnalyzeChunk(ctx, chunk, *s.ProjectInfo)
 					if err != nil {
+						mu.Lock()
 						s.Errors = append(s.Errors,
 							fmt.Errorf("analyze failed for %s:%d-%d: %w",
 								chunk.FilePath, chunk.StartLine, chunk.EndLine, err))
+						mu.Unlock()
 						continue
 					}
+					
+					mu.Lock()
+					s.TotalPromptTokens += resp.PromptTokens
+					s.TotalCandidatesTokens += resp.CandidatesTokens
+					mu.Unlock()
+
 					if resp != nil && len(resp.Issues) > 0 {
 						findingChan <- resp.Issues
 					}

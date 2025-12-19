@@ -10,18 +10,7 @@ import (
 )
 
 // GenerateMarkdown creates a markdown report from the findings.
-func GenerateMarkdown(findings []geminiclient.Finding, repoURL string) (string, error) {
-	if len(findings) == 0 {
-		return "No findings to report.", nil
-	}
-
-	// Group findings by severity
-	findingsBySeverity := make(map[string][]geminiclient.Finding)
-	for _, f := range findings {
-		severityUpper := strings.ToUpper(f.Severity) // Convert to uppercase
-		findingsBySeverity[severityUpper] = append(findingsBySeverity[severityUpper], f)
-	}
-
+func GenerateMarkdown(findings []geminiclient.Finding, repoURL string, promptTokens, candidatesTokens int) (string, error) {
 	var md strings.Builder
 
 	// Header
@@ -29,23 +18,47 @@ func GenerateMarkdown(findings []geminiclient.Finding, repoURL string) (string, 
 	md.WriteString(fmt.Sprintf("**Generated on:** %s\n\n", time.Now().Format(time.RFC1123)))
 	md.WriteString("---\n\n")
 
-	// Write sections for each severity, ordered
-	severities := []string{"HIGH", "MEDIUM", "LOW"}
-	for _, severity := range severities {
-		if issues, found := findingsBySeverity[severity]; found {
-			// Sort issues by file and line for consistent output
-			sort.Slice(issues, func(i, j int) bool {
-				if issues[i].File != issues[j].File {
-					return issues[i].File < issues[j].File
-				}
-				return issues[i].Line < issues[j].Line
-			})
+	// Statistics Section
+	md.WriteString("## 📊 Analysis Statistics\n")
+	md.WriteString(fmt.Sprintf("- **Total Prompt Tokens:** %d\n", promptTokens))
+	md.WriteString(fmt.Sprintf("- **Total Response Tokens:** %d\n", candidatesTokens))
+	
+	// Estimated cost calculation (based on Gemini 2.5 Pro prices - June 2025)
+	// Prices: $1.25 / 1M input tokens, $10.00 / 1M output tokens
+	inputCost := float64(promptTokens) / 1000000.0 * 1.25
+	outputCost := float64(candidatesTokens) / 1000000.0 * 10.00
+	totalCost := inputCost + outputCost
+	md.WriteString(fmt.Sprintf("- **Estimated Cost:** $%.4f\n\n", totalCost))
+	md.WriteString("---\n\n")
 
-			md.WriteString(getSeverityHeader(severity))
-			for _, issue := range issues {
-				md.WriteString(fmt.Sprintf("- `%s:%d` – %s\n", issue.File, issue.Line, issue.Description))
+	if len(findings) == 0 {
+		md.WriteString("No findings to report.\n")
+	} else {
+		// Group findings by severity
+		findingsBySeverity := make(map[string][]geminiclient.Finding)
+		for _, f := range findings {
+			severityUpper := strings.ToUpper(f.Severity) // Convert to uppercase
+			findingsBySeverity[severityUpper] = append(findingsBySeverity[severityUpper], f)
+		}
+
+		// Write sections for each severity, ordered
+		severities := []string{"HIGH", "MEDIUM", "LOW"}
+		for _, severity := range severities {
+			if issues, found := findingsBySeverity[severity]; found {
+				// Sort issues by file and line for consistent output
+				sort.Slice(issues, func(i, j int) bool {
+					if issues[i].File != issues[j].File {
+						return issues[i].File < issues[j].File
+					}
+					return issues[i].Line < issues[j].Line
+				})
+
+				md.WriteString(getSeverityHeader(severity))
+				for _, issue := range issues {
+					md.WriteString(fmt.Sprintf("- `%s:%d` – %s\n", issue.File, issue.Line, issue.Description))
+				}
+				md.WriteString("\n")
 			}
-			md.WriteString("\n")
 		}
 	}
 
