@@ -15,6 +15,7 @@ import (
 
 	"github.com/c-bata/go-prompt"
 	"github.com/charmbracelet/glamour"
+	"github.com/google/generative-ai-go/genai"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
@@ -38,11 +39,20 @@ var (
 	fileCache *tools.ProjectFilesCache
 	chatCtx   context.Context
 	chatSess  *geminiclient.ChatSession
+	client    *geminiclient.GeminiClient
 
 	// Cancellation control
 	currentCancel context.CancelFunc
 	cancelMu      sync.Mutex
 	lastSignal    time.Time
+
+	// Slash commands list for autocomplete
+	slashCommands = []prompt.Suggest{
+		{Text: "/clear", Description: "Clear chat history and terminal"},
+		{Text: "/save", Description: "Save chat history to a markdown file"},
+		{Text: "/quit", Description: "Exit the chat"},
+		{Text: "/exit", Description: "Exit the chat"},
+	}
 )
 
 func startChat() {
@@ -85,7 +95,7 @@ func startChat() {
 		fmt.Printf("Warning: Could not build file cache: %v\n", err)
 	}
 
-	client, err := geminiclient.New(chatCtx, debug)
+	client, err = geminiclient.New(chatCtx, debug)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating client: %v\n", err)
 		os.Exit(1)
@@ -94,7 +104,7 @@ func startChat() {
 	chatSess = client.StartChat()
 
 	fmt.Println("✅ Agent Ready! Ask me anything about this project.")
-	fmt.Println("   💡 Use @ to autocomplete files.")
+	fmt.Println("   💡 Use @ to autocomplete files, / for commands.")
 	fmt.Println("   (Type 'exit' or '/quit' to stop)")
 	fmt.Println()
 
@@ -112,18 +122,31 @@ func startChat() {
 
 func completer(d prompt.Document) []prompt.Suggest {
 	word := d.GetWordBeforeCursor()
-	if !strings.HasPrefix(word, "@") {
-		return []prompt.Suggest{}
+	
+	// Handle Slash Commands
+	if strings.HasPrefix(word, "/") {
+		var suggests []prompt.Suggest
+		for _, c := range slashCommands {
+			if strings.HasPrefix(c.Text, word) {
+				suggests = append(suggests, c)
+			}
+		}
+		return suggests
 	}
 
-	filter := strings.TrimPrefix(word, "@")
-	var suggests []prompt.Suggest
-	for _, f := range fileCache.Files {
-		if filter == "" || strings.Contains(strings.ToLower(f), strings.ToLower(filter)) {
-			suggests = append(suggests, prompt.Suggest{Text: "@" + f})
+	// Handle @ Files
+	if strings.HasPrefix(word, "@") {
+		filter := strings.TrimPrefix(word, "@")
+		var suggests []prompt.Suggest
+		for _, f := range fileCache.Files {
+			if filter == "" || strings.Contains(strings.ToLower(f), strings.ToLower(filter)) {
+				suggests = append(suggests, prompt.Suggest{Text: "@" + f})
+			}
 		}
+		return suggests
 	}
-	return suggests
+
+	return []prompt.Suggest{}
 }
 
 func executor(input string) {
@@ -132,9 +155,16 @@ func executor(input string) {
 		return
 	}
 
+	// Handle exit commands
 	if input == "exit" || input == "quit" || input == "/quit" || input == "/exit" {
 		fmt.Println("Bye!")
 		os.Exit(0)
+	}
+
+	// Handle Slash Commands
+	if strings.HasPrefix(input, "/") {
+		handleSlashCommand(input)
+		return
 	}
 
 	// Create cancellable context for this turn
@@ -192,6 +222,56 @@ func executor(input string) {
 			fmt.Print(out)
 			fmt.Println()
 		}
+	}
+}
+
+func handleSlashCommand(input string) {
+	parts := strings.Fields(input)
+	cmd := parts[0]
+
+	switch cmd {
+	case "/clear":
+		chatSess = client.StartChat()
+		fmt.Print("\033[H\033[2J") // Clear screen and reset cursor
+		fmt.Println("✅ Session cleared. Starting fresh.")
+		fmt.Println()
+	case "/save":
+		filename := "chat_history.md"
+		if len(parts) > 1 {
+			filename = parts[1]
+			if !strings.HasSuffix(filename, ".md") {
+				filename += ".md"
+			}
+		}
+		
+		history := chatSess.History()
+		var sb strings.Builder
+		sb.WriteString("# Chat History - " + time.Now().Format("2006-01-02 15:04:05") + "\n\n")
+		
+		for _, h := range history {
+			role := "Unknown"
+			if h.Role == "user" {
+				role = "### User"
+			} else if h.Role == "model" {
+				role = "### Agent"
+			}
+			
+			sb.WriteString(role + ":\n")
+			for _, p := range h.Parts {
+				if t, ok := p.(genai.Text); ok {
+					sb.WriteString(string(t) + "\n\n")
+				}
+			}
+		}
+		
+		err := os.WriteFile(filename, []byte(sb.String()), 0644)
+		if err != nil {
+			fmt.Printf("\033[31mError saving history: %v\033[0m\n", err)
+		} else {
+			fmt.Printf("✅ History saved to %s\n", filename)
+		}
+	default:
+		fmt.Printf("\033[31mUnknown command: %s. Type / to see available commands.\033[0m\n", cmd)
 	}
 }
 
