@@ -175,23 +175,38 @@ func (c *RawClient) SendMessageRaw(ctx context.Context, msg string) (string, err
 			if c.Debug {
 				log.Printf("[DEBUG] Raw Tool Call: %s(%v)", name, args)
 			}
-			fmt.Printf("🛠️  Executando: %s...\n", name)
+
+			// Format arguments for display
+			argsJSON, _ := json.Marshal(args)
+			fmt.Printf("\n\033[1;33m⚠️  O Agente deseja executar a ferramenta:\033[0m \033[1;36m%s\033[0m\n", name)
+			fmt.Printf("   Argumentos: %s\n", string(argsJSON))
+			fmt.Printf("   \033[1;35mAutorizar execução? [y/N]: \033[0m")
+
+			var response string
+			fmt.Scanln(&response)
+			response = strings.ToLower(strings.TrimSpace(response))
 
 			var result map[string]interface{}
 			var toolErr error
 
-			// Execute tool
-			switch name {
-			case "list_files":
-				result, toolErr = tools.ToolListFiles(ctx, args)
-			case "read_file":
-				result, toolErr = tools.ToolReadFile(ctx, args)
-			case "search_files":
-				result, toolErr = tools.ToolSearchFiles(ctx, args)
-			case "run_shell":
-				result, toolErr = tools.ToolRunShell(ctx, args, c.Settings.ShellWhitelist)
-			default:
-				result = map[string]interface{}{"error": "Unknown function"}
+			if response == "y" || response == "yes" {
+				fmt.Printf("   🛠️  Executando %s...\n", name)
+				// Execute tool
+				switch name {
+				case "list_files":
+					result, toolErr = tools.ToolListFiles(ctx, args)
+				case "read_file":
+					result, toolErr = tools.ToolReadFile(ctx, args)
+				case "search_files":
+					result, toolErr = tools.ToolSearchFiles(ctx, args)
+				case "run_shell":
+					result, toolErr = tools.ToolRunShell(ctx, args, c.Settings.ShellWhitelist)
+				default:
+					result = map[string]interface{}{"error": "Unknown function"}
+				}
+			} else {
+				fmt.Printf("   🚫 Execução negada pelo usuário.\n")
+				result = map[string]interface{}{"error": "User denied execution of this tool."}
 			}
 
 			if toolErr != nil {
