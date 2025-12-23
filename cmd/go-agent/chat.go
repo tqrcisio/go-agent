@@ -1,0 +1,270 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"go-agent/internal/geminiclient"
+	"go-agent/internal/tools"
+	"os"
+	"os/signal"
+	"regexp"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/c-bata/go-prompt"
+	"github.com/charmbracelet/glamour"
+	"github.com/joho/godotenv"
+	"github.com/spf13/cobra"
+)
+
+var chatCmd = &cobra.Command{
+	Use:   "chat",
+	Short: "Start an interactive chat with your codebase",
+	Long: `Starts a chat session where you can ask questions about the code.
+The agent uses tools to explore the file system and read files as needed.
+Use @filename to include file content directly in your message.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		startChat()
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(chatCmd)
+}
+
+var (
+	fileCache *tools.ProjectFilesCache
+	chatCtx   context.Context
+	chatSess  *geminiclient.ChatSession
+
+	// Cancellation control
+	currentCancel context.CancelFunc
+	cancelMu      sync.Mutex
+	lastSignal    time.Time
+)
+
+func startChat() {
+	_ = godotenv.Load()
+	chatCtx = context.Background()
+	debug, _ := rootCmd.PersistentFlags().GetBool("debug")
+
+	// Setup signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		for range sigChan {
+			now := time.Now()
+
+			// Double Ctrl+C check
+			if now.Sub(lastSignal) < 500*time.Millisecond {
+				fmt.Println("\nForce quitting...")
+				os.Exit(0)
+			}
+			lastSignal = now
+
+			cancelMu.Lock()
+			if currentCancel != nil {
+				fmt.Println("\nCancelling current operation...")
+				currentCancel()
+				currentCancel = nil
+			} else {
+				fmt.Println("\n(Press Ctrl+C again quickly to exit)")
+			}
+			cancelMu.Unlock()
+		}
+	}()
+
+	fmt.Println("🤖 Initializing Agent...")
+	
+	var err error
+	fileCache, err = tools.NewProjectFilesCache(".")
+	if err != nil {
+		fmt.Printf("Warning: Could not build file cache: %v\n", err)
+	}
+
+	client, err := geminiclient.New(chatCtx, debug)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating client: %v\n", err)
+		os.Exit(1)
+	}
+
+	chatSess = client.StartChat()
+
+	fmt.Println("✅ Agent Ready! Ask me anything about this project.")
+	fmt.Println("   💡 Use @ to autocomplete files.")
+	fmt.Println("   (Type 'exit' or '/quit' to stop)")
+	fmt.Println()
+
+	p := prompt.New(
+		executor,
+		completer,
+		prompt.OptionPrefix("You > "),
+		prompt.OptionPrefixTextColor(prompt.Blue),
+		prompt.OptionSuggestionBGColor(prompt.DarkGray),
+		prompt.OptionSelectedSuggestionBGColor(prompt.LightGray),
+		prompt.OptionSelectedSuggestionTextColor(prompt.Black),
+	)
+	p.Run()
+}
+
+func completer(d prompt.Document) []prompt.Suggest {
+	word := d.GetWordBeforeCursor()
+	if !strings.HasPrefix(word, "@") {
+		return []prompt.Suggest{}
+	}
+
+	filter := strings.TrimPrefix(word, "@")
+	var suggests []prompt.Suggest
+	for _, f := range fileCache.Files {
+		if filter == "" || strings.Contains(strings.ToLower(f), strings.ToLower(filter)) {
+			suggests = append(suggests, prompt.Suggest{Text: "@" + f})
+		}
+	}
+	return suggests
+}
+
+func executor(input string) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return
+	}
+
+	if input == "exit" || input == "quit" || input == "/quit" || input == "/exit" {
+		fmt.Println("Bye!")
+		os.Exit(0)
+	}
+
+	// Create cancellable context for this turn
+	ctx, cancel := context.WithCancel(chatCtx)
+
+	cancelMu.Lock()
+	currentCancel = cancel
+	cancelMu.Unlock()
+
+	defer func() {
+		cancel()
+		cancelMu.Lock()
+		// Only clear if it hasn't been replaced (though strictly it's sequential here)
+		currentCancel = nil
+		cancelMu.Unlock()
+	}()
+
+	// Process @files
+	finalPrompt := processFilesContext(ctx, input)
+
+	// Check if cancelled during file processing
+	if ctx.Err() != nil {
+		fmt.Println("\nOperation cancelled.")
+		return
+	}
+
+	fmt.Print("\033[33mThinking...\033[0m\r")
+	resp, err := chatSess.SendMessage(ctx, finalPrompt)
+	fmt.Print("\r\033[K")
+
+	if err != nil {
+		if err == context.Canceled {
+			fmt.Println("\nCancelled.")
+		} else {
+			fmt.Printf("\033[31mError: %v\033[0m\n", err)
+		}
+		return
+	}
+
+	fmt.Printf("\033[1;32mAgent:\033[0m\n")
+	
+	// Render Markdown response
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(100),
+	)
+	if err != nil {
+		// Fallback to plain text if renderer fails
+		fmt.Printf("%s\n\n", resp)
+	} else {
+		out, err := renderer.Render(resp)
+		if err != nil {
+			fmt.Printf("%s\n\n", resp)
+		} else {
+			fmt.Print(out)
+			fmt.Println()
+		}
+	}
+}
+
+func processFilesContext(ctx context.Context, input string) string {
+	re := regexp.MustCompile(`@([^\s]+)`)
+	matches := re.FindAllStringSubmatch(input, -1)
+
+	if len(matches) == 0 {
+		return input
+	}
+
+	var sb strings.Builder
+	sb.WriteString(input)
+	sb.WriteString("\n\n---\nContexto de arquivos selecionados:\n")
+
+	processed := make(map[string]bool)
+	for _, match := range matches {
+		if ctx.Err() != nil {
+			break
+		}
+
+		fileName := match[1]
+		if processed[fileName] {
+			continue
+		}
+
+		// 1. Basic security and existence checks
+		info, err := os.Stat(fileName)
+		if err != nil {
+			fmt.Printf("\n\033[31m⚠️  File not found: %s\033[0m\n", fileName)
+			continue
+		}
+
+		if info.IsDir() {
+			fmt.Printf("\n\033[33m⚠️  Skipping directory: %s (support coming soon)\033[0m\n", fileName)
+			continue
+		}
+
+		// 2. Size limit check
+		if info.Size() > 100*1024 { // 100KB limit
+			fmt.Printf("\n\033[33m⚠️  File too large (>100KB), skipping: %s\033[0m\n", fileName)
+			continue
+		}
+
+		// 3. Read and Binary check
+		content, err := os.ReadFile(fileName)
+		if err != nil {
+			fmt.Printf("\n\033[31m⚠️  Error reading file: %s\033[0m\n", fileName)
+			continue
+		}
+
+		if isBinary(content) {
+			fmt.Printf("\n\033[33m⚠️  Binary file detected, skipping: %s\033[0m\n", fileName)
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("\nArquivo: %s\n```\n%s\n```\n", fileName, string(content)))
+		processed[fileName] = true
+	}
+
+	return sb.String()
+}
+
+func isBinary(content []byte) bool {
+	// Check for null byte in the first 1024 bytes to detect binary files
+	limit := 1024
+	if len(content) < limit {
+		limit = len(content)
+	}
+	for i := 0; i < limit; i++ {
+		if content[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
