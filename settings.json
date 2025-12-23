@@ -1,0 +1,13 @@
+{
+  "shell_whitelist": [
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "git",
+    "go",
+    "echo",
+    "pwd",
+    "mkdir"
+  ]
+}

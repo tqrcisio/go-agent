@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go-agent/internal/config"
 	"go-agent/internal/tools"
 	"io"
 	"log"
@@ -15,20 +16,29 @@ import (
 
 // RawClient manages a chat session using raw HTTP requests to bypass SDK limitations regarding thought_signatures.
 type RawClient struct {
-	APIKey  string
-	Model   string
-	History []map[string]interface{}
-	Tools   []map[string]interface{}
-	Debug   bool
+	APIKey   string
+	Model    string
+	History  []map[string]interface{}
+	Tools    []map[string]interface{}
+	Debug    bool
+	Settings *config.Settings
 }
 
 // NewRawClient creates a new raw HTTP client for Gemini.
 func NewRawClient(debug bool) *RawClient {
+	settings, err := config.LoadSettings()
+	if err != nil {
+		log.Printf("Warning: Failed to load settings: %v. Using defaults.", err)
+		def := config.DefaultSettings()
+		settings = &def
+	}
+
 	return &RawClient{
-		APIKey: os.Getenv("GEMINI_API_KEY"),
-		Model:  "gemini-3-flash-preview", // Hardcoded for now as per requirement
-		Debug:  debug,
-		History: []map[string]interface{}{},
+		APIKey:   os.Getenv("GEMINI_API_KEY"),
+		Model:    "gemini-3-flash-preview", // Hardcoded for now as per requirement
+		Debug:    debug,
+		Settings: settings,
+		History:  []map[string]interface{}{},
 		Tools: []map[string]interface{}{
 			{
 				"function_declarations": []map[string]interface{}{
@@ -75,6 +85,20 @@ func NewRawClient(debug bool) *RawClient {
 								},
 							},
 							"required": []string{"pattern"},
+						},
+					},
+					{
+						"name":        "run_shell",
+						"description": "Execute a shell command. Use for git operations, building, running tests, etc. Commands must be whitelisted.",
+						"parameters": map[string]interface{}{
+							"type": "OBJECT",
+							"properties": map[string]interface{}{
+								"command": map[string]interface{}{
+									"type":        "STRING",
+									"description": "The command to execute (e.g., 'git status', 'go test ./...').",
+								},
+							},
+							"required": []string{"command"},
 						},
 					},
 				},
@@ -164,6 +188,8 @@ func (c *RawClient) SendMessageRaw(ctx context.Context, msg string) (string, err
 				result, toolErr = tools.ToolReadFile(ctx, args)
 			case "search_files":
 				result, toolErr = tools.ToolSearchFiles(ctx, args)
+			case "run_shell":
+				result, toolErr = tools.ToolRunShell(ctx, args, c.Settings.ShellWhitelist)
 			default:
 				result = map[string]interface{}{"error": "Unknown function"}
 			}
@@ -181,13 +207,8 @@ func (c *RawClient) SendMessageRaw(ctx context.Context, msg string) (string, err
 		}
 
 		// Add function responses to history
-		// API v1beta expects function responses in a 'function' role block? 
-		// Or 'user' block with functionResponse parts? 
-		// For Gemini 1.5/2/3, usually it is a separate message with role 'function' containing functionResponse parts.
-		
-		// Let's try appending a message with role "function"
 		c.History = append(c.History, map[string]interface{}{
-			"role":  "function", // Try 'function' role which is standard for tool outputs
+			"role":  "function", 
 			"parts": functionResponses,
 		})
 		
