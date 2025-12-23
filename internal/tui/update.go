@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -51,24 +52,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		case tea.KeyEnter:
-			if m.state == StateChat {
-				if m.textarea.Value() == "" {
-					return m, nil
-				}
-				
-				userInput := m.textarea.Value()
-				m.messages = append(m.messages, ChatMessage{Role: "user", Content: userInput})
-				
-				// Update viewport with new message immediately
-				m.viewport.SetContent(m.renderConversation())
-				m.viewport.GotoBottom()
-				
-m.textarea.Reset()
-				m.state = StateLoading
-				return m, tea.Batch(
-					m.spinner.Tick,
-					sendMessageCmd(&m, userInput),
-				)
+						if m.state == StateChat {
+							if m.textarea.Value() == "" {
+								return m, nil
+							}
+							
+							userInput := m.textarea.Value()
+			
+							// Handle Slash Commands
+							if strings.HasPrefix(userInput, "/") {
+								m.textarea.Reset()
+								// Add the command itself to history for visibility? 
+								// Maybe just execute it. Usually commands are ephemeral or shown as system actions.
+								// Let's NOT add the user's slash command to the chat history to keep it clean,
+								// except maybe as a log? "You > /help"
+								// Let's add it for clarity.
+								m.messages = append(m.messages, ChatMessage{Role: "user", Content: userInput})
+								m.viewport.SetContent(m.renderConversation()) // Update view with command
+								
+								cmd := m.handleSlashCommand(userInput)
+								return m, cmd
+							}
+			
+							m.messages = append(m.messages, ChatMessage{Role: "user", Content: userInput})
+							
+							// Update viewport with new message immediately
+							m.viewport.SetContent(m.renderConversation())
+							m.viewport.GotoBottom()
+							
+							m.textarea.Reset()
+							m.state = StateLoading
+							return m, tea.Batch(
+								m.spinner.Tick,
+								sendMessageCmd(&m, userInput),
+							)
+			
 			} else if m.state == StateConfirmTool {
 				// Handle Y/N for tool confirmation if user types manually?
 				// Actually, we'll listen for specific keys 'y' or 'n' below
@@ -146,8 +164,10 @@ func (m Model) renderConversation() string {
 		content := renderMarkdown(msg.Content, width)
 		if msg.Role == "user" {
 			s += fmt.Sprintf("%s\n%s\n\n", senderStyle.Render("You:"), content)
-		} else {
+		} else if msg.Role == "model" {
 			s += fmt.Sprintf("%s\n%s\n\n", botSenderStyle.Render("Gemini:"), content)
+		} else if msg.Role == "system" {
+			s += fmt.Sprintf("%s\n%s\n\n", systemSenderStyle.Render("System:"), content)
 		}
 	}
 	return s

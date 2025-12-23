@@ -20,6 +20,11 @@ var (
 			Bold(true).
 			MarginRight(1)
 
+	systemSenderStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244")). // Gray
+			Bold(true).
+			MarginRight(1)
+
 	toolStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("208")). // Orange
 			Italic(true)

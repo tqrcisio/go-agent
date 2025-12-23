@@ -120,6 +120,11 @@ func NewRawClient(debug bool) *RawClient {
 	}
 }
 
+// ClearHistory resets the chat history.
+func (c *RawClient) ClearHistory() {
+	c.History = []map[string]interface{}{}
+}
+
 // SendMessageRaw sends a message and handles tool loops using raw JSON.
 func (c *RawClient) SendMessageRaw(ctx context.Context, msg string) (string, error) {
 	// Add user message to history
