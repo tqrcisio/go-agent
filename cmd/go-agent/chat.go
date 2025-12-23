@@ -161,9 +161,9 @@ func executor(input string) {
 		return
 	}
 
-	fmt.Print("\033[33mThinking...\033[0m\r")
+	stopSpinner := startSpinner()
 	resp, err := chatSess.SendMessage(ctx, finalPrompt)
-	fmt.Print("\r\033[K")
+	stopSpinner()
 
 	if err != nil {
 		if err == context.Canceled {
@@ -192,6 +192,35 @@ func executor(input string) {
 			fmt.Print(out)
 			fmt.Println()
 		}
+	}
+}
+
+func startSpinner() func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	go func() {
+		frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		i := 0
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Print("\r\033[K") // Clear line
+				close(done)
+				return
+			case <-ticker.C:
+				fmt.Printf("\r\033[33m%s Thinking...\033[0m", frames[i%len(frames)])
+				i++
+			}
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-done
 	}
 }
 
