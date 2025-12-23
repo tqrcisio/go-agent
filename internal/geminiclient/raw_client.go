@@ -16,12 +16,13 @@ import (
 
 // RawClient manages a chat session using raw HTTP requests to bypass SDK limitations regarding thought_signatures.
 type RawClient struct {
-	APIKey   string
-	Model    string
-	History  []map[string]interface{}
-	Tools    []map[string]interface{}
-	Debug    bool
-	Settings *config.Settings
+	APIKey    string
+	Model     string
+	History   []map[string]interface{}
+	Tools     []map[string]interface{}
+	Debug     bool
+	Settings  *config.Settings
+	ConfirmFn func(name string, args map[string]interface{}) bool
 }
 
 // NewRawClient creates a new raw HTTP client for Gemini.
@@ -39,6 +40,18 @@ func NewRawClient(debug bool) *RawClient {
 		Debug:    debug,
 		Settings: settings,
 		History:  []map[string]interface{}{},
+		ConfirmFn: func(name string, args map[string]interface{}) bool {
+			// Default implementation if none provided
+			argsJSON, _ := json.Marshal(args)
+			fmt.Printf("\n\033[1;33m⚠️  O Agente deseja executar a ferramenta:\033[0m \033[1;36m%s\033[0m\n", name)
+			fmt.Printf("   Argumentos: %s\n", string(argsJSON))
+			fmt.Printf("   \033[1;35mAutorizar execução? [y/N]: \033[0m")
+
+			var response string
+			fmt.Scanln(&response)
+			response = strings.ToLower(strings.TrimSpace(response))
+			return response == "y" || response == "yes"
+		},
 		Tools: []map[string]interface{}{
 			{
 				"function_declarations": []map[string]interface{}{
@@ -176,20 +189,10 @@ func (c *RawClient) SendMessageRaw(ctx context.Context, msg string) (string, err
 				log.Printf("[DEBUG] Raw Tool Call: %s(%v)", name, args)
 			}
 
-			// Format arguments for display
-			argsJSON, _ := json.Marshal(args)
-			fmt.Printf("\n\033[1;33m⚠️  O Agente deseja executar a ferramenta:\033[0m \033[1;36m%s\033[0m\n", name)
-			fmt.Printf("   Argumentos: %s\n", string(argsJSON))
-			fmt.Printf("   \033[1;35mAutorizar execução? [y/N]: \033[0m")
-
-			var response string
-			fmt.Scanln(&response)
-			response = strings.ToLower(strings.TrimSpace(response))
-
 			var result map[string]interface{}
 			var toolErr error
 
-			if response == "y" || response == "yes" {
+			if c.ConfirmFn(name, args) {
 				fmt.Printf("   🛠️  Executando %s...\n", name)
 				// Execute tool
 				switch name {
