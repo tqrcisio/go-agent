@@ -46,15 +46,15 @@ var (
 	cancelMu      sync.Mutex
 	lastSignal    time.Time
 
-	// Slash commands list for autocomplete
-	slashCommands = []prompt.Suggest{
-		{Text: "/clear", Description: "Clear chat history and terminal"},
-		{Text: "/save", Description: "Save chat history to a markdown file"},
-		{Text: "/quit", Description: "Exit the chat"},
-		{Text: "/exit", Description: "Exit the chat"},
-	}
-)
-
+	        // Slash commands list for autocomplete
+	        slashCommands = []prompt.Suggest{
+	                {Text: "/clear", Description: "Clear chat history and terminal"},
+	                {Text: "/save", Description: "Save chat history to a markdown file"},
+	                {Text: "/tools", Description: "List available tools"},
+	                {Text: "/quit", Description: "Exit the chat"},
+	                {Text: "/exit", Description: "Exit the chat"},
+	        }
+	)
 func startChat() {
 	_ = godotenv.Load()
 	chatCtx = context.Background()
@@ -270,6 +270,18 @@ func handleSlashCommand(input string) {
 		} else {
 			fmt.Printf("✅ History saved to %s\n", filename)
 		}
+	case "/tools":
+		fmt.Println("🛠️  Available Tools:")
+		for _, tool := range chatSess.RawClient.Tools {
+			if fd, ok := tool["function_declarations"].([]map[string]interface{}); ok {
+				for _, f := range fd {
+					name, _ := f["name"].(string)
+					desc, _ := f["description"].(string)
+					fmt.Printf("- \033[1;36m%s\033[0m: %s\n", name, desc)
+				}
+			}
+		}
+		fmt.Println()
 	default:
 		fmt.Printf("\033[31mUnknown command: %s. Type / to see available commands.\033[0m\n", cmd)
 	}
