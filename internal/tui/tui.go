@@ -11,8 +11,7 @@ import (
 func StartTUI(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest) error {
 	p := tea.NewProgram(
 		NewModel(client, reqChan),
-		tea.WithAltScreen(),       // Use full screen
-		tea.WithMouseCellMotion(), // Enable mouse
+		tea.WithAltScreen(), // Use full screen
 	)
 
 	if _, err := p.Run(); err != nil {
