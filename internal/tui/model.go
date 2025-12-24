@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"go-agent/internal/geminiclient"
+	"go-agent/internal/tools"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -42,6 +44,14 @@ type Model struct {
 	// Channels for communication with the AI runner
 	confirmReqChan <-chan ToolConfirmRequest // Receive requests from AI
 	currentReq     *ToolConfirmRequest       // The request currently being asked
+	
+	// Autocomplete
+	fileCache      *tools.ProjectFilesCache
+	suggestions    []string
+	suggestionIdx  int
+	showSuggestions bool
+	filterText     string // The text being typed for filter (@main.go -> main.go)
+	triggerType    string // "@" or "/"
 }
 
 func NewModel(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest) Model {
@@ -62,6 +72,13 @@ func NewModel(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest)
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	// Initialize File Cache
+	cache, err := tools.NewProjectFilesCache(".")
+	if err != nil {
+		// Log error to viewport or ignore
+		vp.SetContent(fmt.Sprintf("Warning: Failed to load file cache: %v", err))
+	}
+
 	return Model{
 		client:         client,
 		state:          StateChat,
@@ -70,6 +87,7 @@ func NewModel(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest)
 		spinner:        sp,
 		messages:       []ChatMessage{},
 		confirmReqChan: reqChan,
+		fileCache:      cache,
 	}
 }
 

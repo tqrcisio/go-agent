@@ -26,12 +26,35 @@ func (m Model) View() string {
 	if m.state == StateLoading {
 		s.WriteString(fmt.Sprintf("\n%s Thinking...\n", m.spinner.View()))
 	} else {
+		// Render suggestions if available
+		if m.showSuggestions {
+			s.WriteString("\n" + m.suggestionsView() + "\n")
+		} else {
+			s.WriteString("\n") // Spacer
+		}
+		
 		// Input Area
 		s.WriteString(m.textarea.View())
 		s.WriteString("\n")
 		s.WriteString(subtleStyle.Render("Press Enter to send • Esc to quit"))
 	}
 
+	return s.String()
+}
+
+func (m Model) suggestionsView() string {
+	var s strings.Builder
+	for i, suggestion := range m.suggestions {
+		if i == m.suggestionIdx {
+			s.WriteString(selectedSuggestionStyle.Render(suggestion))
+		} else {
+			s.WriteString(suggestionStyle.Render(suggestion))
+		}
+		s.WriteString(" ") // Space between suggestions (horizontal list? or vertical?)
+		// Let's do horizontal for compact look or vertical?
+		// Vertical is better for file paths
+		s.WriteString("\n")
+	}
 	return s.String()
 }
 

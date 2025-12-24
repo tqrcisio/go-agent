@@ -28,6 +28,16 @@ var (
 	toolStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("208")). // Orange
 			Italic(true)
+			
+	suggestionStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1)
+
+	selectedSuggestionStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("229")).
+			Background(lipgloss.Color("63")).
+			Padding(0, 1)
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(danger).
