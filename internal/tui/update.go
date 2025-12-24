@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -452,19 +451,21 @@ m.viewport, vpCmd = m.viewport.Update(msg)
 
 func (m Model) renderConversation() string {
 	var s string
-	width := m.viewport.Width - 4 // Padding
-	if width < 10 {
-		width = 10
+	width := m.viewport.Width - 6 // Extra padding for borders
+	if width < 20 {
+		width = 20
 	}
 
 	for _, msg := range m.messages {
 		content := renderMarkdown(msg.Content, width)
 		if msg.Role == "user" {
-			s += fmt.Sprintf("%s\n%s\n\n", senderStyle.Render("You:"), content)
+			s += senderStyle.Render("USER") + "\n"
+			s += userMsgStyle.Render(content) + "\n"
 		} else if msg.Role == "model" {
-			s += fmt.Sprintf("%s\n%s\n\n", botSenderStyle.Render("Gemini:"), content)
+			s += botSenderStyle.Render("ASSISTANT") + "\n"
+			s += botMsgStyle.Render(content) + "\n"
 		} else if msg.Role == "system" {
-			s += fmt.Sprintf("%s\n%s\n\n", systemSenderStyle.Render("System:"), content)
+			s += systemSenderStyle.Render("• "+msg.Content) + "\n\n"
 		}
 	}
 	return s

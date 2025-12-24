@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,56 +16,79 @@ func (m Model) View() string {
 
 	var s strings.Builder
 
-	// Header?
-	// s.WriteString("Gemini Code Agent\n\n")
-
-	// Viewport (Chat History)
+	// 1. Viewport (Chat History)
 	s.WriteString(m.viewport.View())
 	s.WriteString("\n")
 
-	// Footer Area
-	if m.state == StateLoading {
-		s.WriteString(fmt.Sprintf("\n%s Thinking...\n", m.spinner.View()))
-	} else {
-		// Render suggestions if available
-		if m.showSuggestions {
-			s.WriteString("\n" + m.suggestionsView() + "\n")
-		} else {
-			s.WriteString("\n") // Spacer
-		}
-		
-		// Input Area
-		s.WriteString(m.textarea.View())
+	// 2. Suggestions or Spacer
+	if m.showSuggestions {
+		s.WriteString(m.suggestionsView() + "\n")
+	} else if m.state != StateLoading {
 		s.WriteString("\n")
-		s.WriteString(subtleStyle.Render("Press Enter to send • Esc to quit"))
 	}
+
+	// 3. Input or Loading
+	if m.state == StateLoading {
+		s.WriteString(fmt.Sprintf("  %s %s\n", m.spinner.View(), subtleStyle.Render("Thinking...")))
+	} else {
+		s.WriteString(m.textarea.View() + "\n")
+	}
+
+	// 4. Status Bar
+	s.WriteString(m.statusBarView())
 
 	return s.String()
 }
 
+func (m Model) statusBarView() string {
+	cwd, _ := os.Getwd()
+	// Shorten path
+	home, _ := os.UserHomeDir()
+	cwd = strings.Replace(cwd, home, "~", 1)
+
+	status := "IDLE"
+	if m.state == StateLoading {
+		status = "BUSY"
+	}
+
+	w := m.viewport.Width
+	if w <= 0 {
+		w = 80
+	}
+
+	left := statusTextStyle.Render(" " + status + " ")
+	left += statusKeyStyle.Render(" Context: ") + cwd
+
+	help := " Esc: cancel • Ctrl+C: exit "
+	if m.showSuggestions {
+		help = " ↑/↓: navigate • Tab: apply "
+	}
+	
+	spaces := w - lipgloss.Width(left) - lipgloss.Width(help)
+	if spaces < 0 {
+		spaces = 0
+	}
+	
+	return statusBarStyle.Render(left + strings.Repeat(" ", spaces) + help)
+}
+
 func (m Model) suggestionsView() string {
 	var s strings.Builder
+	s.WriteString(subtleStyle.Render("  SUGGESTIONS:") + "\n")
 	for i, suggestion := range m.suggestions {
+		prefix := "  "
+		line := suggestion
 		if i == m.suggestionIdx {
-			s.WriteString(selectedSuggestionStyle.Render(suggestion))
+			line = selectedSuggestionStyle.Render(" " + suggestion + " ")
 		} else {
-			s.WriteString(suggestionStyle.Render(suggestion))
+			line = suggestionStyle.Render(suggestion)
 		}
-		s.WriteString(" ") // Space between suggestions (horizontal list? or vertical?)
-		// Let's do horizontal for compact look or vertical?
-		// Vertical is better for file paths
-		s.WriteString("\n")
+		s.WriteString(prefix + line + "\n")
 	}
 	return s.String()
 }
 
 func (m Model) confirmView() string {
-	// Overlay or full screen replace? For simplicity, replace/append at bottom
-	
-	// We want to show the chat history still? 
-	// Ideally yes, but maybe simpler to show just the confirmation for now to be safe with layout.
-	// Or we can construct a string that includes the viewport.
-	
 	var s strings.Builder
 	s.WriteString(m.viewport.View())
 	s.WriteString("\n")
@@ -72,15 +96,14 @@ func (m Model) confirmView() string {
 	if m.currentReq != nil {
 		argsJSON, _ := json.MarshalIndent(m.currentReq.Args, "", "  ")
 		
-		panel := boxStyle.Render(fmt.Sprintf(
-			"%s requests to run tool: %s\n\nArguments:\n%s\n\n%s",
-			botSenderStyle.Render("🤖 Agent"),
-			toolStyle.Render(m.currentReq.Name),
-			lipgloss.NewStyle().Foreground(subtle).Render(string(argsJSON)),
-			"Allow execution? (y/n)",
-		))
-		s.WriteString("\n" + panel + "\n")
+		title := toolStyle.Render(" 🛠️  TOOL REQUEST: " + m.currentReq.Name)
+		body := subtleStyle.Render(string(argsJSON))
+		footer := "\n" + greenStyle.Render(" [Y] Approve ") + " " + redStyle.Render(" [N] Deny ")
+
+		card := toolCardStyle.Render(title + "\n\n" + body + footer)
+		s.WriteString(card + "\n")
 	}
 
+	s.WriteString(m.statusBarView())
 	return s.String()
 }

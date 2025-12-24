@@ -62,11 +62,11 @@ type Model struct {
 
 func NewModel(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest) Model {
 	ta := textarea.New()
-	ta.Placeholder = "Ask a question about your code..."
+	ta.Placeholder = "Message Gemini Code Agent..."
 	ta.Focus()
-	ta.Prompt = "┃ "
+	ta.Prompt = " ❯ "
 	ta.CharLimit = 0
-	ta.SetHeight(3)
+	ta.SetHeight(2)
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ta.ShowLineNumbers = false
 	ta.KeyMap.InsertNewline.SetEnabled(false)
