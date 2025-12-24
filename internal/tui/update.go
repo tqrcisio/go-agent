@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -24,13 +25,12 @@ func waitForConfirmation(ch <-chan ToolConfirmRequest) tea.Cmd {
 }
 
 // Command to send message to Gemini
-func sendMessageCmd(m *Model, msg string) tea.Cmd {
+func sendMessageCmd(ctx context.Context, m *Model, msg string) tea.Cmd {
 	return func() tea.Msg {
 		// Process @files expansion before sending
-		// We use a background context or a specific timeout context if needed
-		fullMsg := processFilesContext(context.Background(), msg)
+		fullMsg := processFilesContext(ctx, msg)
 		
-		resp, err := m.client.SendMessageRaw(context.Background(), fullMsg)
+		resp, err := m.client.SendMessageRaw(ctx, fullMsg)
 		if err != nil {
 			return errMsg(err)
 		}
@@ -47,25 +47,69 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
-		case tea.KeyMsg:
+			case tea.KeyMsg:
 
-			switch msg.Type {
+				switch msg.Type {
 
-			case tea.KeyCtrlC, tea.KeyEsc:
+				case tea.KeyCtrlC:
 
-				if m.showSuggestions {
+					if time.Since(m.lastInterrupt) < 500*time.Millisecond {
 
-					m.showSuggestions = false
+						return m, tea.Quit
+
+					}
+
+					m.lastInterrupt = time.Now()
+
+					m.messages = append(m.messages, ChatMessage{Role: "system", Content: "(Press Ctrl+C again quickly to exit)"})
+
+					m.viewport.SetContent(m.renderConversation())
+
+					m.viewport.GotoBottom()
 
 					return m, nil
 
-				}
+		
 
-				return m, tea.Quit
+				case tea.KeyEsc:
 
-				
+					if m.showSuggestions {
 
-			case tea.KeyTab:
+						m.showSuggestions = false
+
+						return m, nil
+
+					}
+
+					if m.state == StateLoading {
+
+						if m.cancelFunc != nil {
+
+							m.cancelFunc()
+
+							m.cancelFunc = nil
+
+						}
+
+						m.state = StateChat
+
+						m.messages = append(m.messages, ChatMessage{Role: "system", Content: "Operation cancelled."})
+
+						m.viewport.SetContent(m.renderConversation())
+
+						m.viewport.GotoBottom()
+
+						return m, nil
+
+					}
+
+					return m, nil // Don't quit on Esc
+
+					
+
+				case tea.KeyTab:
+
+		
 
 				if m.showSuggestions {
 
@@ -177,19 +221,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					
 
-					m.textarea.Reset()
+									m.textarea.Reset()
 
-					m.showSuggestions = false // Clear suggestions on send
+					
 
-					m.state = StateLoading
+									m.showSuggestions = false // Clear suggestions on send
 
-					return m, tea.Batch(
+					
 
-						m.spinner.Tick,
+									m.state = StateLoading
 
-						sendMessageCmd(&m, userInput),
+					
 
-					)
+					
+
+					
+
+									// Create cancellable context
+
+					
+
+									ctx, cancel := context.WithCancel(context.Background())
+
+					
+
+									m.cancelFunc = cancel
+
+					
+
+					
+
+					
+
+									return m, tea.Batch(
+
+					
+
+										m.spinner.Tick,
+
+					
+
+										sendMessageCmd(ctx, &m, userInput),
+
+					
+
+									)
+
+					
+
+					
 
 				} else if m.state == StateConfirmTool {
 
@@ -243,27 +323,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	
 
-		case responseMsg:
-
-			m.state = StateChat
-
-			m.messages = append(m.messages, ChatMessage{Role: "model", Content: string(msg)})
-
-			m.viewport.SetContent(m.renderConversation())
-
-			m.viewport.GotoBottom()
-
-			return m, nil
+			case responseMsg:
 
 	
 
-		case errMsg:
+				m.state = StateChat
 
-			m.state = StateChat
+	
 
-			m.err = msg
+				m.cancelFunc = nil
 
-			return m, nil
+	
+
+				m.messages = append(m.messages, ChatMessage{Role: "model", Content: string(msg)})
+
+	
+
+				m.viewport.SetContent(m.renderConversation())
+
+	
+
+				m.viewport.GotoBottom()
+
+	
+
+				return m, nil
+
+	
+
+		
+
+	
+
+			case errMsg:
+
+	
+
+				m.state = StateChat
+
+	
+
+				m.cancelFunc = nil
+
+	
+
+				// Don't show "context canceled" as a big red error if it was user-initiated
+
+	
+
+				if m.err != context.Canceled {
+
+	
+
+					m.err = msg
+
+	
+
+				}
+
+	
+
+				return m, nil
+
+	
+
+		
 
 	
 

@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"go-agent/internal/geminiclient"
 	"go-agent/internal/tools"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -52,6 +54,10 @@ type Model struct {
 	showSuggestions bool
 	filterText     string // The text being typed for filter (@main.go -> main.go)
 	triggerType    string // "@" or "/"
+
+	// Exit and Cancellation
+	cancelFunc    context.CancelFunc
+	lastInterrupt time.Time
 }
 
 func NewModel(client *geminiclient.RawClient, reqChan <-chan ToolConfirmRequest) Model {
