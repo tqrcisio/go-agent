@@ -19,3 +19,8 @@
 go.work
 go.work.sum
 /go-agent
+
+# go-semantic-release leaves these in the working tree; goreleaser then
+# refuses to run on a dirty checkout.
+.semrel/
+.generated-go-semantic-release-changelog.md
