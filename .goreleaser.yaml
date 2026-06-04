@@ -1,7 +1,7 @@
 # .goreleaser.yaml
 version: 2
 
-project_name: bugscan
+project_name: go-agent
 
 before:
   hooks:
@@ -17,8 +17,8 @@ builds:
     goarch:
       - amd64
       - arm64
-    main: ./cmd/go-agent/main.go
-    binary: bugscan
+    main: ./cmd/go-agent
+    binary: go-agent
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 

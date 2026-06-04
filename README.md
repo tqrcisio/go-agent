@@ -2,6 +2,37 @@
 
 BugScan is a powerful, multi-language command-line tool written in Go that leverages Google's Gemini AI to analyze GitHub repositories for potential bugs, vulnerabilities, and code quality issues. It employs a **Multi-Agent Architecture** orchestrated by a central pipeline to first understand the project's context and then perform a deep, tailored analysis.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tqrcisio/go-agent/main/install.sh | sh
+```
+
+This downloads the latest release binary for your platform into `~/.local/bin`
+(override with `GO_AGENT_INSTALL_DIR`) and installs it as `go-agent`. Pin a
+specific version with `GO_AGENT_VERSION=v1.2.0`. macOS and Linux (x86_64 /
+arm64) are covered; on Windows grab the zip from the
+[releases page](https://github.com/tqrcisio/go-agent/releases).
+
+Then confirm and start:
+
+```bash
+go-agent version
+go-agent chat
+```
+
+## Updating
+
+`go-agent` checks GitHub Releases once a day and prints a hint when a newer
+version exists. To upgrade in place:
+
+```bash
+go-agent update
+```
+
+It downloads the latest release for your platform and swaps the running
+binary; the new version takes effect on the next run.
+
 ## Features
 
 - **Multi-Agent Architecture**: A modular pipeline of specialized agents:

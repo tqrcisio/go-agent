@@ -7,6 +7,7 @@ import (
 	"go-agent/internal/geminiclient"
 	"go-agent/internal/orchestrator"
 	"go-agent/internal/state"
+	"go-agent/internal/updater"
 	"log"
 	"os"
 
@@ -14,11 +15,58 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Build information, injected at release time via -ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 var rootCmd = &cobra.Command{
-	Use:   "bugscan",
+	Use:   "go-agent",
 	Short: "AI-powered multi-language code analysis tool",
-	Long: `BugScan is a tool that uses Gemini AI to analyze code repositories.
-It employs a Multi-Agent Architecture using an orchestrator to manage the workflow.`, 
+	Long: `go-agent is a tool that uses Gemini AI to analyze code repositories.
+It employs a Multi-Agent Architecture using an orchestrator to manage the workflow.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		switch cmd.Name() {
+		case "update", "version", "help", "chat":
+			return
+		}
+		updater.NotifyIfOutdated(version)
+	},
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version information",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("go-agent %s\ncommit: %s\nbuilt:  %s\n", version, commit, date)
+	},
+}
+
+var updateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update go-agent to the latest released version",
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+
+		fmt.Println("Checking for updates...")
+		latest, err := updater.LatestTag(ctx)
+		if err != nil {
+			log.Fatalf("Could not check for updates: %v", err)
+		}
+
+		if !updater.IsNewer(latest, version) {
+			fmt.Printf("Already on the latest version (%s).\n", version)
+			return
+		}
+
+		fmt.Printf("Updating %s -> %s ...\n", version, latest)
+		if err := updater.SelfUpdate(ctx); err != nil {
+			log.Fatalf("Update failed: %v", err)
+		}
+		fmt.Printf("Updated to %s. Restart go-agent to use the new version.\n", latest)
+	},
 }
 
 var analyzeCmd = &cobra.Command{
@@ -109,6 +157,8 @@ var analyzeCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug logs")
 	rootCmd.AddCommand(analyzeCmd)
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(updateCmd)
 }
 
 func main() {
