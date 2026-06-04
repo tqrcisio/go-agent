@@ -2,14 +2,14 @@ name: release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
-  goreleaser:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,15 +17,40 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Compute the next version from conventional commits without tagging or
+      # releasing yet. force-bump-patch-version means every push to main ships
+      # at least a patch, so a release always goes out.
+      - name: Compute next version
+        id: semver
+        uses: go-semantic-release/action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry: true
+          allow-initial-development-versions: true
+          force-bump-patch-version: true
+
+      - name: Create and push tag
+        if: steps.semver.outputs.version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.semver.outputs.version }}"
+          git push origin "v${{ steps.semver.outputs.version }}"
+
       - name: Set up Go
+        if: steps.semver.outputs.version != ''
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
       - name: Run tests
+        if: steps.semver.outputs.version != ''
         run: go test ./...
 
+      # goreleaser sees the tag we just created on HEAD, builds every platform,
+      # and publishes the GitHub release with the go-agent_* assets.
       - name: Run GoReleaser
+        if: steps.semver.outputs.version != ''
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
