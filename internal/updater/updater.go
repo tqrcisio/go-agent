@@ -1,6 +1,4 @@
-// Package updater handles self-updating the go-agent binary from GitHub
-// Releases. A CLI can replace its own executable in place, so there is no need
-// for the two-binary handoff a long-running service would require.
+// Package updater self-updates the go-agent binary from GitHub Releases.
 package updater
 
 import (
